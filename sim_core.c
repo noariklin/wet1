@@ -3,6 +3,9 @@
 
 #include "sim_api.h"
 
+#include <assert.h>
+#include <string.h>
+
 
 SIM_coreState core_State;
 void WBState();
