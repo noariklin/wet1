@@ -2,7 +2,7 @@
 /* This file should hold your implementation of the CPU pipeline core simulator */
 
 #include "sim_api.h"
-#include <stdbool.h>
+
 #include <assert.h>
 #include <string.h>
 
@@ -15,7 +15,6 @@ void ControlStats(int);
 void ExecuteState();
 void DecodeState();
 void FetchStage();
-void doNop(pipeStage);
 
 typedef struct ControlSignals_ {
 	int RegWrite;
@@ -30,10 +29,6 @@ typedef struct ControlSignals_ {
 ControlSignals PipelineSignals[SIM_PIPELINE_DEPTH];
 
 
-struct FetchToDecode_ {
-	SIM_cmd cmd;
-	int32_t PCP4;
-}FetchToDecode;
 
 struct DecodeToExe_ {
 	int32_t val1;
@@ -61,7 +56,7 @@ struct WBResult_ {
 
 int PCSrc = 0;
 int32_t PCTarget; //PC+4+dst
-int MemResult;
+int MemResult=0;
 int CStall = 0;
 
 /*! SIM_CoreReset: Reset the processor core simulator machine to start new simulation
@@ -84,8 +79,6 @@ int SIM_CoreReset(void) {
 	doNop(MEMORY);
 	doNop(WRITEBACK);
 	SIM_MemInstRead(0x0, &core_State.pipeStageState[FETCH].cmd);
-	FetchToDecode.cmd = core_State.pipeStageState[FETCH].cmd;
-	FetchToDecode.PCP4 = core_State.pc + 0x4;
 	return 0;
 }
 
@@ -93,6 +86,7 @@ int SIM_CoreReset(void) {
   This function is expected to update the core pipeline given a clock cycle event.
 */
 void SIM_CoreClkTick() {
+	ControlStats(MemResult);
 	WBState();
 	if (split_regfile) {
 		core_State.regFile[WBResult.dstIdx] = WBResult.value;
@@ -109,11 +103,12 @@ void SIM_CoreClkTick() {
 	}
 	else if (MemResult == 0) {
 		ExecuteState();
-		DecodeState();
-
+		if (CStall == 0) {
+			DecodeState();
+			FetchStage();
+		}
+		core_State.regFile[WBResult.dstIdx] = WBResult.value;
 	}
-	ControlStats(MemResult);
-	FetchStage();
 }
 
 /*! SIM_CoreGetState: Return the current core (pipeline) internal state
@@ -122,17 +117,8 @@ void SIM_CoreClkTick() {
 */
 void SIM_CoreGetState(SIM_coreState *curState) {
 	curState->pc = core_State.pc;
-	for(int i = 0 ; i < SIM_REGFILE_SIZE ; ++i){
-        curState->regFile[i] = core_State.regFile[i];
-	}
-
-
-    curState->pipeStageState[FETCH] = core_State.pipeStageState[FETCH];
-    curState->pipeStageState[DECODE] = core_State.pipeStageState[DECODE];
-    curState->pipeStageState[EXECUTE] = core_State.pipeStageState[EXECUTE];
-    curState->pipeStageState[MEMORY] = core_State.pipeStageState[MEMORY];
-    curState->pipeStageState[WRITEBACK] = core_State.pipeStageState[WRITEBACK];
-
+	*(curState->regFile) = *(core_State.regFile);
+	*(curState->pipeStageState) = *(core_State.pipeStageState);
 
 }
 
@@ -143,10 +129,7 @@ void FetchStage() {
 	else {
 		core_State.pc = PCTarget;
 	}
-	SIM_MemInstRead((uint32_t)core_State.pc, &core_State.pipeStageState[0].cmd);
-	FetchToDecode.cmd = core_State.pipeStageState[0].cmd;
-	FetchToDecode.PCP4 = core_State.pc + 0x4;
-	
+	SIM_MemInstRead(core_State.pc, &core_State.pipeStageState[0].cmd);
 }
 
 void DecodeSignalsState(SIM_cmd_opcode opc) {
@@ -253,9 +236,8 @@ void UpdateVal(pipeStage stage) {
 }
 
 void DecodeState() {
-	SIM_cmd_opcode opc = FetchToDecode.cmd.opcode;
+	SIM_cmd_opcode opc = core_State.pipeStageState[DECODE].cmd.opcode;
 	DecodeSignalsState(opc);
-	core_State.pipeStageState[DECODE].cmd = FetchToDecode.cmd;
 	UpdateVal(DECODE);
 		switch (opc) //update the buffer
 		{
@@ -266,29 +248,29 @@ void DecodeState() {
 			case CMD_LOAD:
 			case CMD_BREQ:
 			case CMD_BRNEQ:
-				DecodeToExe.val1 = core_State.regFile[FetchToDecode.cmd.src1];
-				if (FetchToDecode.cmd.isSrc2Imm) {
-					DecodeToExe.val2 = FetchToDecode.cmd.src2;
+				DecodeToExe.val1 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src1];
+				if (core_State.pipeStageState[DECODE].cmd.isSrc2Imm) {
+					DecodeToExe.val2 = core_State.pipeStageState[DECODE].cmd.src2;
 				}
 				else {
-					DecodeToExe.val2 = core_State.regFile[FetchToDecode.cmd.src2];
+					DecodeToExe.val2 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src2];
 				}
-				DecodeToExe.dstIdx = FetchToDecode.cmd.dst;
+				DecodeToExe.dstIdx = core_State.pipeStageState[DECODE].cmd.dst;
 				break;
 			case CMD_STORE:
-				DecodeToExe.val1 = core_State.regFile[FetchToDecode.cmd.dst];
-				if (FetchToDecode.cmd.isSrc2Imm) {
-					DecodeToExe.val2 = FetchToDecode.cmd.src2;
+				DecodeToExe.val1 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.dst];
+				if (core_State.pipeStageState[DECODE].cmd.isSrc2Imm) {
+					DecodeToExe.val2 = core_State.pipeStageState[DECODE].cmd.src2;
 				}
 				else {
-					DecodeToExe.val2 = core_State.regFile[FetchToDecode.cmd.src2];
+					DecodeToExe.val2 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src2];
 				}
-				DecodeToExe.dstIdx = FetchToDecode.cmd.src1;
+				DecodeToExe.dstIdx = core_State.pipeStageState[DECODE].cmd.src1;
 				break;
 			case CMD_BR:
 				DecodeToExe.val1 = 0x0;
 				DecodeToExe.val2 = 0x0;
-				DecodeToExe.dstIdx = FetchToDecode.cmd.dst;
+				DecodeToExe.dstIdx = core_State.pipeStageState[DECODE].cmd.dst;
 				break;
 			case CMD_HALT:
 			case CMD_NOP:
@@ -299,7 +281,7 @@ void DecodeState() {
 			default:
 				break;
 		}
-		DecodeToExe.pcp4 = FetchToDecode.PCP4;
+		DecodeToExe.pcp4 = core_State.pc + 0x4;
 }
 
 void ExecuteState() {
@@ -329,14 +311,14 @@ int MemoryState() {
 		return 0;
 	}
 	int loadResult;
-	uint32_t addr = (uint32_t)ExeToMem.ALUOut * 0x4;
+	int32_t addr = ExeToMem.ALUOut * 0x4;
 	MemToWB.dstIdx = ExeToMem.dstIdx;
 	MemToWB.ALUOut = ExeToMem.ALUOut;
-	if (PipelineSignals[3].MemRead == 1) { //LOAD
+	if (PipelineSignals[MEMORY].MemRead == 1) { //LOAD
 		loadResult = SIM_MemDataRead(addr, &(MemToWB.MEMOut));
 		return loadResult;
 	}
-	else if (PipelineSignals[3].MemWrite == 1) { //STORE
+	else if (PipelineSignals[MEMORY].MemWrite == 1) { //STORE
 		int32_t data = core_State.regFile[ExeToMem.dstIdx];
 		SIM_MemDataWrite(addr, data);
 		return 0;
@@ -424,7 +406,8 @@ int HDU() {
 }
 
 
-void doNop(pipeStage stage_to_nop){
+void doNop (pipeStage stage_to_nop){
+
 	PipelineSignals[stage_to_nop].ALUControl = 0;
 	PipelineSignals[stage_to_nop].Branch = 0;
 	PipelineSignals[stage_to_nop].BrControl = 0;
@@ -459,7 +442,6 @@ void ControlStats (int isMemRead) {
 				PipelineSignals[EXECUTE] = PipelineSignals[DECODE];
 				core_State.pipeStageState[EXECUTE] = core_State.pipeStageState[DECODE];
 				core_State.pipeStageState[DECODE] = core_State.pipeStageState[FETCH];
-
 			}
 			break;
 		case -1:
@@ -477,3 +459,4 @@ void ControlStats (int isMemRead) {
 	}
 
 }
+
