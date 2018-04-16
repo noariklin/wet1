@@ -2,7 +2,7 @@
 /* This file should hold your implementation of the CPU pipeline core simulator */
 
 #include "sim_api.h"
-
+#include <stdbool.h>
 #include <assert.h>
 #include <string.h>
 
@@ -57,6 +57,7 @@ struct WBResult_ {
 int PCSrc = 0;
 int32_t PCTarget; //PC+4+dst
 int MemResult=0;
+int nextMemResult = 0;
 int CStall = 0;
 
 /*! SIM_CoreReset: Reset the processor core simulator machine to start new simulation
@@ -91,15 +92,10 @@ void SIM_CoreClkTick() {
 	if (split_regfile) {
 		core_State.regFile[WBResult.dstIdx] = WBResult.value;
 	}
-	MemResult = MemoryState();
+	nextMemResult = MemoryState();
 	if (MemResult == -1) {
-		core_State.regFile[WBResult.dstIdx] = WBResult.value;
-		if (core_State.pipeStageState[1].cmd.src1 == WBResult.dstIdx) {
-			core_State.pipeStageState[1].src1Val = WBResult.value;
-		}
-		else if(!core_State.pipeStageState[1].cmd.isSrc2Imm && (core_State.pipeStageState[1].cmd.src2 == WBResult.dstIdx)){
-			core_State.pipeStageState[1].src2Val = WBResult.value;
-		}
+		UpdateVal(DECODE);
+		return;
 	}
 	else if (MemResult == 0) {
 		ExecuteState();
@@ -107,8 +103,15 @@ void SIM_CoreClkTick() {
 			DecodeState();
 			FetchStage();
 		}
+	}
+	else if (MemResult == 1) {
+		FetchStage();
+	}
+	if (!split_regfile) {
 		core_State.regFile[WBResult.dstIdx] = WBResult.value;
 	}
+	MemResult = nextMemResult;
+	return;
 }
 
 /*! SIM_CoreGetState: Return the current core (pipeline) internal state
@@ -117,9 +120,14 @@ void SIM_CoreClkTick() {
 */
 void SIM_CoreGetState(SIM_coreState *curState) {
 	curState->pc = core_State.pc;
-	*(curState->regFile) = *(core_State.regFile);
-	*(curState->pipeStageState) = *(core_State.pipeStageState);
-
+	for (int i = 0; i < SIM_REGFILE_SIZE; ++i) {
+		curState->regFile[i] = core_State.regFile[i];
+	}
+	curState->pipeStageState[FETCH] = core_State.pipeStageState[FETCH];
+	curState->pipeStageState[DECODE] = core_State.pipeStageState[DECODE];
+	curState->pipeStageState[EXECUTE] = core_State.pipeStageState[EXECUTE];
+	curState->pipeStageState[MEMORY] = core_State.pipeStageState[MEMORY];
+	curState->pipeStageState[WRITEBACK] = core_State.pipeStageState[WRITEBACK];
 }
 
 void FetchStage() {
@@ -459,4 +467,3 @@ void ControlStats (int isMemRead) {
 	}
 
 }
-
