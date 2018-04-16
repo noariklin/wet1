@@ -53,11 +53,11 @@ int main(int argc, char const *argv[]) {
         int i, simDuration;
   //      forwarding = false // split_regfile = false;
 
-        char const *memFname = argv[1];
-        char const *simDurationStr = argv[2];
+        char const *memFname = "./example1.img";
+        int numS = 2;
 
         SIM_coreState curState;
-
+        printf("%s \n" , memFname);
         /* Initialized simulation modules */
         if (SIM_MemReset(memFname) != 0) {
             fprintf(stderr, "Failed initializing memory simulator!\n");
@@ -71,18 +71,18 @@ int main(int argc, char const *argv[]) {
         }
 
         /* Running simulation */
-        simDuration = atoi(simDurationStr);
-        if (simDuration <= 0) {
+        //simDuration = atoi(simDurationStr);
+       /* if (simDuration <= 0) {
             fprintf(stderr, "Invalid simulation duration argument: %s\n",
                     simDurationStr);
             exit(4);
-        }
+        }*/
 
-        printf("Running simulation for %d cycles\n", simDuration);
+        printf("Running simulation for %d cycles\n", numS);
         printf("Simulation on cycle %d. The state is:\n", 0);
         SIM_CoreGetState(&curState);
         DumpCoreState(&curState);
-        for (i = 0; i < simDuration; i++) {
+        for (i = 0; i < numS; i++) {
             SIM_CoreClkTick();
             SIM_MemClkTick();
             printf("\n\nSimulation on cycle %d. The state is:\n", i+1);
