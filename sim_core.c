@@ -103,12 +103,12 @@ void SIM_CoreClkTick() {
 			DecodeState();
 			FetchStage();
 		}
+		if (!split_regfile) {
+			core_State.regFile[WBResult.dstIdx] = WBResult.value;
+		}
 	}
 	else if (MemResult == 1) {
 		FetchStage();
-	}
-	if (!split_regfile) {
-		core_State.regFile[WBResult.dstIdx] = WBResult.value;
 	}
 	MemResult = nextMemResult;
 	return;
