@@ -101,7 +101,7 @@ void SIM_CoreClkTick() {
 		UpdateVal(DECODE);
 
 		FetchStage();
-		core_State.pc -= 0x4;
+		//core_State.pc -= 0x4;
 		return;
 	}
 	else if (MemResult == 0) {
@@ -150,7 +150,7 @@ void FetchStage() {
             --PCSrc;
 	    }
 	}
-	SIM_MemInstRead(core_State.pc, &core_State.pipeStageState[0].cmd);
+	SIM_MemInstRead((uint32_t)core_State.pc, &core_State.pipeStageState[0].cmd);
 }
 
 void DecodeSignalsState(SIM_cmd_opcode opc) {
