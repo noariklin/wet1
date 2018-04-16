@@ -53,13 +53,14 @@ int main(int argc, char const *argv[]) {
         int i, simDuration;
   //      forwarding = false // split_regfile = false;
 
-        char const *memFname = "./example1.img";
-        int numS = 2;
-
+    char const *memF = "example1.img" ;
+        char const *memName = memF;
+        int numS = 8;
+//example1
         SIM_coreState curState;
-        printf("%s \n" , memFname);
+        printf("%s \n" , memF);
         /* Initialized simulation modules */
-        if (SIM_MemReset(memFname) != 0) {
+        if (SIM_MemReset(memName) != 0) {
             fprintf(stderr, "Failed initializing memory simulator!\n");
             exit(2);
         }

@@ -78,7 +78,7 @@ int SIM_CoreReset(void) {
 		core_State.regFile[i] = 0x0;
 	}
 	// ìäëðéñ NOP áëì äèáìä
-	SIM_MemInstRead(0x0, &core_State.pipeStageState[0].cmd);
+	SIM_MemInstRead(0x0, &core_State.pipeStageState[0].cmd );
 	return 0;
 }
 
@@ -425,13 +425,17 @@ void doNop (pipeStage stage_to_nop){
 
 }
 
+//void Cp_PipeStageState(){}
+//void Cp_coreState(SIM_coreState cor1, SIM_coreState cor2){
+
+//}
 void ControlStats (int isMemRead) {
 	int CStall = HDU();
 
 	switch (isMemRead) {
 		case 0:
 
-			PipelineSignals[WRITEBACK] = PipelineSignals[MEMORY];
+			PipelineSignals[WRITEBACK] = (PipelineSignals[MEMORY]);
 			core_State.pipeStageState[WRITEBACK] = core_State.pipeStageState[MEMORY];
 
 			PipelineSignals[MEMORY] = PipelineSignals[EXECUTE];
