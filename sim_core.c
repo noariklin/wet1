@@ -61,7 +61,7 @@ struct WBResult_ {
 int PCSrc = 0;
 int32_t PCTarget; //PC+4+dst
 int MemResult;
-int Stall = 0;
+int CStall = 0;
 
 /*! SIM_CoreReset: Reset the processor core simulator machine to start new simulation
   Use this API to initialize the processor core simulator's data structures.
@@ -77,8 +77,14 @@ int SIM_CoreReset(void) {
 	for (int i = 0; i <= 31; i++) {
 		core_State.regFile[i] = 0x0;
 	}
-	// ìäëðéñ NOP áëì äèáìä
-	SIM_MemInstRead(0x0, &core_State.pipeStageState[0].cmd );
+	doNop(FETCH);
+	doNop(DECODE);
+	doNop(EXECUTE);
+	doNop(MEMORY);
+	doNop(WRITEBACK);
+	SIM_MemInstRead(0x0, &core_State.pipeStageState[FETCH].cmd);
+	FetchToDecode.cmd = core_State.pipeStageState[FETCH].cmd;
+	FetchToDecode.PCP4 = core_State.pc + 0x4;
 	return 0;
 }
 
@@ -87,6 +93,9 @@ int SIM_CoreReset(void) {
 */
 void SIM_CoreClkTick() {
 	WBState();
+	if (split_regfile) {
+		core_State.regFile[WBResult.dstIdx] = WBResult.value;
+	}
 	MemResult = MemoryState();
 	if (MemResult == -1) {
 		core_State.regFile[WBResult.dstIdx] = WBResult.value;
@@ -97,8 +106,11 @@ void SIM_CoreClkTick() {
 			core_State.pipeStageState[1].src2Val = WBResult.value;
 		}
 	}
-	ExecuteState();
-	DecodeState();
+	else if (MemResult == 0) {
+		ExecuteState();
+		DecodeState();
+
+	}
 	ControlStats(MemResult);
 	FetchStage();
 }
@@ -115,8 +127,6 @@ void SIM_CoreGetState(SIM_coreState *curState) {
 }
 
 void FetchStage() {
-	FetchToDecode.cmd = core_State.pipeStageState[0].cmd;
-	FetchToDecode.PCP4 = core_State.pc + 0x4;
 	if (PCSrc == 0) {
 		core_State.pc += 0x4;
 	}
@@ -124,6 +134,9 @@ void FetchStage() {
 		core_State.pc = PCTarget;
 	}
 	SIM_MemInstRead(core_State.pc, &core_State.pipeStageState[0].cmd);
+	FetchToDecode.cmd = core_State.pipeStageState[0].cmd;
+	FetchToDecode.PCP4 = core_State.pc + 0x4;
+	
 }
 
 void DecodeSignalsState(SIM_cmd_opcode opc) {
@@ -199,39 +212,41 @@ void DecodeSignalsState(SIM_cmd_opcode opc) {
 	}
 }
 
+void UpdateVal(pipeStage stage) {
+	switch (core_State.pipeStageState[stage].cmd.opcode)
+	{
+	case CMD_ADD:
+	case CMD_SUB:
+	case CMD_ADDI:
+	case CMD_SUBI:
+	case CMD_LOAD:
+	case CMD_BREQ:
+	case CMD_BRNEQ:
+	case CMD_STORE:
+		core_State.pipeStageState[stage].src1Val = core_State.regFile[core_State.pipeStageState[stage].cmd.src1];
+		if (core_State.pipeStageState[stage].cmd.isSrc2Imm) {
+			core_State.pipeStageState[stage].src2Val = core_State.pipeStageState[stage].cmd.src2;
+		}
+		else {
+			core_State.pipeStageState[stage].src2Val = core_State.regFile[core_State.pipeStageState[stage].cmd.src2];
+		}
+		break;
+	case CMD_BR:
+	case CMD_HALT:
+	case CMD_NOP:
+		core_State.pipeStageState[stage].src1Val = 0x0;
+		core_State.pipeStageState[stage].src2Val = 0x0;
+		break;
+	default:
+		break;
+	}
+}
+
 void DecodeState() {
 	SIM_cmd_opcode opc = FetchToDecode.cmd.opcode;
 	DecodeSignalsState(opc);
-	core_State.pipeStageState[1].cmd = FetchToDecode.cmd;
-	switch (opc)
-	{
-		case CMD_ADD:
-		case CMD_SUB:
-		case CMD_ADDI:
-		case CMD_SUBI:
-		case CMD_LOAD:
-		case CMD_BREQ:
-		case CMD_BRNEQ:
-		case CMD_STORE:
-			core_State.pipeStageState[1].src1Val = core_State.regFile[core_State.pipeStageState[1].cmd.src1];
-			if (core_State.pipeStageState[1].cmd.isSrc2Imm) {
-				core_State.pipeStageState[1].src2Val = core_State.pipeStageState[1].cmd.src2;
-			}
-			else {
-				core_State.pipeStageState[1].src2Val = core_State.regFile[core_State.pipeStageState[1].cmd.src2];
-			}
-			break;
-		case CMD_BR:
-		case CMD_HALT:
-		case CMD_NOP:
-			core_State.pipeStageState[1].src1Val = 0x0;
-			core_State.pipeStageState[1].src2Val = 0x0;
-			break;
-		default:
-			break;
-	}
-	Stall = HDU();
-	if (Stall == 0) {
+	core_State.pipeStageState[DECODE].cmd = FetchToDecode.cmd;
+	UpdateVal(DECODE);
 		switch (opc) //update the buffer
 		{
 			case CMD_ADD:
@@ -275,13 +290,6 @@ void DecodeState() {
 				break;
 		}
 		DecodeToExe.pcp4 = FetchToDecode.PCP4;
-	}
-	else {
-		DecodeToExe.val1 = 0;
-		DecodeToExe.val2 = 0;
-		DecodeToExe.pcp4 = 0;
-		DecodeToExe.dstIdx = 0;
-	}
 }
 
 void ExecuteState() {
@@ -386,19 +394,20 @@ int HDU() {
 		default:
 			break;
 	}
-	if (PipelineSignals[2].RegWrite == 1) {
-		int idx = core_State.pipeStageState[2].cmd.dst;
-		if ((idx == idx1) || (idx == idx2) || (idx == idx3)) return 3;
-	}
-	if (PipelineSignals[3].RegWrite == 1) {
-		int idx = core_State.pipeStageState[3].cmd.dst;
-		if ((idx == idx1) || (idx == idx2) || (idx == idx3)) return 2;
-	}
-	if (PipelineSignals[4].RegWrite == 1) {
-		int idx = core_State.pipeStageState[4].cmd.dst;
+	if (PipelineSignals[EXECUTE].RegWrite == 1) {
+		int idx = core_State.pipeStageState[EXECUTE].cmd.dst;
 		if ((idx == idx1) || (idx == idx2) || (idx == idx3)) return 1;
 	}
-	if ((core_State.pipeStageState[1].cmd.opcode == CMD_STORE) || (PipelineSignals[2].RegWrite == 1)) {
+	if (PipelineSignals[MEMORY].RegWrite == 1) {
+		int idx = core_State.pipeStageState[MEMORY].cmd.dst;
+		if ((idx == idx1) || (idx == idx2) || (idx == idx3)) return 1;
+	}
+	if ((PipelineSignals[WRITEBACK].RegWrite == 1) && (!split_regfile)) {
+		int idx = core_State.pipeStageState[WRITEBACK].cmd.dst;
+		if ((idx == idx1) || (idx == idx2) || (idx == idx3)) return 1;
+	}
+	if ((core_State.pipeStageState[DECODE].cmd.opcode == CMD_STORE) && (PipelineSignals[EXECUTE].RegWrite == 1) && 
+																									(!split_regfile)) {
 		if (core_State.pipeStageState[1].cmd.src1 == core_State.pipeStageState[2].cmd.dst) return 1;
 	}
 	return 0;
@@ -420,24 +429,19 @@ void doNop (pipeStage stage_to_nop){
 	core_State.pipeStageState[stage_to_nop].cmd.isSrc2Imm = false;
 	core_State.pipeStageState[stage_to_nop].cmd.src1 = 0;
 	core_State.pipeStageState[stage_to_nop].cmd.src2 = 0;
-	core_State.pipeStageState[stage_to_nop].src1Val = 0;
-	core_State.pipeStageState[stage_to_nop].src2Val = 0;
+	core_State.pipeStageState[stage_to_nop].src1Val = 0x0;
+	core_State.pipeStageState[stage_to_nop].src2Val = 0x0;
 
 }
 
-//void Cp_PipeStageState(){}
-//void Cp_coreState(SIM_coreState cor1, SIM_coreState cor2){
 
-//}
+
 void ControlStats (int isMemRead) {
-	int CStall = HDU();
-
 	switch (isMemRead) {
 		case 0:
-
-			PipelineSignals[WRITEBACK] = (PipelineSignals[MEMORY]);
+			CStall = HDU();
+			PipelineSignals[WRITEBACK] = PipelineSignals[MEMORY];
 			core_State.pipeStageState[WRITEBACK] = core_State.pipeStageState[MEMORY];
-
 			PipelineSignals[MEMORY] = PipelineSignals[EXECUTE];
 			core_State.pipeStageState[MEMORY] = core_State.pipeStageState[EXECUTE];
 			if (CStall != 0) {
@@ -445,6 +449,8 @@ void ControlStats (int isMemRead) {
 			} else {
 				PipelineSignals[EXECUTE] = PipelineSignals[DECODE];
 				core_State.pipeStageState[EXECUTE] = core_State.pipeStageState[DECODE];
+				core_State.pipeStageState[DECODE] = core_State.pipeStageState[FETCH];
+
 			}
 			break;
 		case -1:
@@ -453,9 +459,9 @@ void ControlStats (int isMemRead) {
 		case 1:
 			PipelineSignals[WRITEBACK] = PipelineSignals[MEMORY];
 			core_State.pipeStageState[WRITEBACK] = core_State.pipeStageState[MEMORY];
+			doNop(MEMORY);
 			doNop(EXECUTE);
 			doNop(DECODE);
-			doNop(FETCH);
 			break;
 		default:
 			break;
