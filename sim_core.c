@@ -15,6 +15,8 @@ void ControlStats(int);
 void ExecuteState();
 void DecodeState();
 void FetchStage();
+void UpdateVal(pipeStage);
+void doNop(pipeStage);
 
 typedef struct ControlSignals_ {
 	int RegWrite;
@@ -59,7 +61,7 @@ int32_t PCTarget; //PC+4+dst
 int MemResult=0;
 int nextMemResult = 0;
 int CStall = 0;
-
+int32_t PCnextTarget;
 /*! SIM_CoreReset: Reset the processor core simulator machine to start new simulation
   Use this API to initialize the processor core simulator's data structures.
   The simulator machine must complete this call with these requirements met:
@@ -92,9 +94,14 @@ void SIM_CoreClkTick() {
 	if (split_regfile) {
 		core_State.regFile[WBResult.dstIdx] = WBResult.value;
 	}
-	nextMemResult = MemoryState();
+	//nextMemResult = MemoryState();
+    MemResult = MemoryState();
 	if (MemResult == -1) {
+
 		UpdateVal(DECODE);
+
+		FetchStage();
+		core_State.pc -= 0x4;
 		return;
 	}
 	else if (MemResult == 0) {
@@ -110,8 +117,8 @@ void SIM_CoreClkTick() {
 	else if (MemResult == 1) {
 		FetchStage();
 	}
-	MemResult = nextMemResult;
-	return;
+	//MemResult = nextMemResult;
+
 }
 
 /*! SIM_CoreGetState: Return the current core (pipeline) internal state
@@ -135,7 +142,13 @@ void FetchStage() {
 		core_State.pc += 0x4;
 	}
 	else {
-		core_State.pc = PCTarget;
+	    if (PCSrc == 1) {
+            core_State.pc = PCTarget;
+        } else{
+	       // PCnextTarget = PCTarget;
+            core_State.pc += 0x4;
+            --PCSrc;
+	    }
 	}
 	SIM_MemInstRead(core_State.pc, &core_State.pipeStageState[0].cmd);
 }
@@ -312,7 +325,7 @@ void ExecuteState() {
 int MemoryState() {
 	if (PipelineSignals[3].Branch == 1) {
 		if ((PipelineSignals[3].BrControl == 0 && ExeToMem.Zero) || (PipelineSignals[3].BrControl == 1 && !ExeToMem.Zero)) {
-			PCSrc = 1;
+			PCSrc = 2;
 			return 1;
 		}
 		else PCSrc = 0;
@@ -323,12 +336,12 @@ int MemoryState() {
 	MemToWB.dstIdx = ExeToMem.dstIdx;
 	MemToWB.ALUOut = ExeToMem.ALUOut;
 	if (PipelineSignals[MEMORY].MemRead == 1) { //LOAD
-		loadResult = SIM_MemDataRead(addr, &(MemToWB.MEMOut));
+		loadResult = SIM_MemDataRead((uint32_t)addr, &(MemToWB.MEMOut));
 		return loadResult;
 	}
 	else if (PipelineSignals[MEMORY].MemWrite == 1) { //STORE
 		int32_t data = core_State.regFile[ExeToMem.dstIdx];
-		SIM_MemDataWrite(addr, data);
+		SIM_MemDataWrite((uint32_t)addr, data);
 		return 0;
 	}
 	return 0;

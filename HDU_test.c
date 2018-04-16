@@ -56,7 +56,7 @@ int main(int argc, char const *argv[]) {
 
     char const *memF = "example2.img" ;
         char const *memName = memF;
-        int numS = 8;
+        int numS = 4;
 //example1
         SIM_coreState curState;
         printf("%s \n" , memF);
