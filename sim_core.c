@@ -2,7 +2,7 @@
 /* This file should hold your implementation of the CPU pipeline core simulator */
 
 #include "sim_api.h"
-
+#include <stdbool.h>
 #include <assert.h>
 #include <string.h>
 
@@ -15,6 +15,7 @@ void ControlStats(int);
 void ExecuteState();
 void DecodeState();
 void FetchStage();
+void doNop(pipeStage);
 
 typedef struct ControlSignals_ {
 	int RegWrite;
@@ -121,8 +122,17 @@ void SIM_CoreClkTick() {
 */
 void SIM_CoreGetState(SIM_coreState *curState) {
 	curState->pc = core_State.pc;
-	*(curState->regFile) = *(core_State.regFile);
-	*(curState->pipeStageState) = *(core_State.pipeStageState);
+	for(int i = 0 ; i < SIM_REGFILE_SIZE ; ++i){
+        curState->regFile[i] = core_State.regFile[i];
+	}
+
+
+    curState->pipeStageState[FETCH] = core_State.pipeStageState[FETCH];
+    curState->pipeStageState[DECODE] = core_State.pipeStageState[DECODE];
+    curState->pipeStageState[EXECUTE] = core_State.pipeStageState[EXECUTE];
+    curState->pipeStageState[MEMORY] = core_State.pipeStageState[MEMORY];
+    curState->pipeStageState[WRITEBACK] = core_State.pipeStageState[WRITEBACK];
+
 
 }
 
@@ -133,7 +143,7 @@ void FetchStage() {
 	else {
 		core_State.pc = PCTarget;
 	}
-	SIM_MemInstRead(core_State.pc, &core_State.pipeStageState[0].cmd);
+	SIM_MemInstRead((uint32_t)core_State.pc, &core_State.pipeStageState[0].cmd);
 	FetchToDecode.cmd = core_State.pipeStageState[0].cmd;
 	FetchToDecode.PCP4 = core_State.pc + 0x4;
 	
@@ -319,7 +329,7 @@ int MemoryState() {
 		return 0;
 	}
 	int loadResult;
-	int32_t addr = ExeToMem.ALUOut * 0x4;
+	uint32_t addr = (uint32_t)ExeToMem.ALUOut * 0x4;
 	MemToWB.dstIdx = ExeToMem.dstIdx;
 	MemToWB.ALUOut = ExeToMem.ALUOut;
 	if (PipelineSignals[3].MemRead == 1) { //LOAD
@@ -414,8 +424,7 @@ int HDU() {
 }
 
 
-void doNop (pipeStage stage_to_nop){
-
+void doNop(pipeStage stage_to_nop){
 	PipelineSignals[stage_to_nop].ALUControl = 0;
 	PipelineSignals[stage_to_nop].Branch = 0;
 	PipelineSignals[stage_to_nop].BrControl = 0;

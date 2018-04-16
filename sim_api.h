@@ -20,7 +20,7 @@ extern "C" {
 
 /* Features flags */
 extern bool forwarding; /* Enable forwarding */
-extern bool split_regfile; /* Enable split clock phase for register file */
+extern bool split_regfile ; /* Enable split clock phase for register file */
 
 /* Commands opcodes */
 typedef enum {

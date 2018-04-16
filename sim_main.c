@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include "sim_api.h"
 
+
 bool forwarding;
 bool split_regfile;
 

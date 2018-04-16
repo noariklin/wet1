@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 
+bool split_regfile = false;
 
 void DumpCoreState(SIM_coreState *state) {
     int i;
@@ -53,7 +54,7 @@ int main(int argc, char const *argv[]) {
         int i, simDuration;
   //      forwarding = false // split_regfile = false;
 
-    char const *memF = "example1.img" ;
+    char const *memF = "example2.img" ;
         char const *memName = memF;
         int numS = 8;
 //example1
