@@ -36,21 +36,23 @@ ControlSignals PipelineSignals[SIM_PIPELINE_DEPTH];
 struct DecodeToExe_ {
 	int32_t val1;
 	int32_t val2;
+	int32_t val3;
 	int32_t pcp4;
 	int dstIdx;
-}DecodeToExe;
+}DecodeToExe, nextDecodeToExe;
 
 struct ExeToMem_ {
 	int32_t ALUOut;
+	int32_t val3;
 	bool Zero;
 	int dstIdx;
-}ExeToMem;
+}ExeToMem, nextExeToMem;
 
 struct MemToWB_ {
 	int32_t ALUOut;
 	int32_t MEMOut;
 	int dstIdx;
-}MemToWB;
+}MemToWB, nextMemToWB;
 
 struct WBResult_ {
 	int32_t value;
@@ -96,11 +98,13 @@ void SIM_CoreClkTick() {
 		core_State.regFile[WBResult.dstIdx] = WBResult.value;
 	}
     nextMemResult = MemoryState();
+	ExecuteState();
+	DecodeState();
 	if(MemResult == 0){
-
+        nextStage();
+        FetchStage();
 	}
 	else if (MemResult == 1) {
-		UpdateVal(DECODE);
 		FetchStage();
 	}
 	if (!split_regfile) {
@@ -246,6 +250,7 @@ void DecodeState() {
 	UpdateVal(DECODE);
 	int32_t val1 = 0;
 	int32_t val2 = 0;
+	int32_t val3 = 0;
 	int dstIdx = 0;
 		switch (opc) //update the buffer
 		{
@@ -254,16 +259,25 @@ void DecodeState() {
 			case CMD_ADDI:
 			case CMD_SUBI:
 			case CMD_LOAD:
+                val1 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src1];
+                if (core_State.pipeStageState[DECODE].cmd.isSrc2Imm) {
+                    val2 = core_State.pipeStageState[DECODE].cmd.src2;
+                } else {
+                    val2 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src2];
+                }
+                dstIdx = core_State.pipeStageState[DECODE].cmd.dst;
+                break;
 			case CMD_BREQ:
 			case CMD_BRNEQ:
-				val1 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src1];
-				if (core_State.pipeStageState[DECODE].cmd.isSrc2Imm) {
-					val2 = core_State.pipeStageState[DECODE].cmd.src2;
-				} else {
-					val2 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src2];
-				}
-				dstIdx = core_State.pipeStageState[DECODE].cmd.dst;
-				break;
+                val1 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src1];
+                if (core_State.pipeStageState[DECODE].cmd.isSrc2Imm) {
+                    val2 = core_State.pipeStageState[DECODE].cmd.src2;
+                } else {
+                    val2 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src2];
+                }
+                dstIdx = core_State.pipeStageState[DECODE].cmd.dst;
+                val3 = core_State.regFile[dstIdx];
+                break;
 			case CMD_STORE:
 				val1 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.dst];
 				if (core_State.pipeStageState[DECODE].cmd.isSrc2Imm) {
@@ -272,11 +286,13 @@ void DecodeState() {
 					val2 = core_State.regFile[core_State.pipeStageState[DECODE].cmd.src2];
 				}
 				dstIdx = core_State.pipeStageState[DECODE].cmd.src1;
+				val3 = core_State.regFile[dstIdx];
 				break;
 			case CMD_BR:
 				val1 = 0x0;
 				val2 = 0x0;
 				dstIdx = core_State.pipeStageState[DECODE].cmd.dst;
+				val3 = core_State.regFile[dstIdx];
 				break;
 			case CMD_HALT:
 			case CMD_NOP:
@@ -287,12 +303,13 @@ void DecodeState() {
 			default:
 				break;
 		}
-	//if(nextMemResult == 0){
-		DecodeToExe.val1 = val1;
-		DecodeToExe.val2 = val2;
-		DecodeToExe.dstIdx = dstIdx;
-		DecodeToExe.pcp4 = core_State.pc + 0x4;
-	//}
+
+		nextDecodeToExe.val1 = val1;
+		nextDecodeToExe.val2 = val2;
+		nextDecodeToExe.val3 = val3;
+		nextDecodeToExe.dstIdx = dstIdx;
+		nextDecodeToExe.pcp4 = core_State.pc + 0x4;
+
 }
 
 void ExecuteState() {
@@ -307,15 +324,13 @@ void ExecuteState() {
 		if (ALUOut == 0) Zero = true;
 		else Zero = false;
 	}
-		int32_t dstVal = core_State.regFile[DecodeToExe.dstIdx];
+		int32_t dstVal = DecodeToExe.val3;
 		dstVal = 0x4 * dstVal;
 		PCTarget = DecodeToExe.pcp4 + dstVal;
-
-		ExeToMem.dstIdx = DecodeToExe.dstIdx;
-		ExeToMem.ALUOut = ALUOut;
-		ExeToMem.Zero = Zero;
-
-
+		nextExeToMem.dstIdx = DecodeToExe.dstIdx;
+		nextExeToMem.ALUOut = ALUOut;
+		nextExeToMem.Zero = Zero;
+		nextExeToMem.val3 = DecodeToExe.val3;
 }
 
 int MemoryState() {
@@ -329,16 +344,15 @@ int MemoryState() {
 	}
 	int loadResult;
 	int32_t addr = ExeToMem.ALUOut;
-	MemToWB.dstIdx = ExeToMem.dstIdx;
-	MemToWB.ALUOut = ExeToMem.ALUOut;
+	nextMemToWB.dstIdx = ExeToMem.dstIdx;
+	nextMemToWB.ALUOut = ExeToMem.ALUOut;
 	if (PipelineSignals[MEMORY].MemRead == 1) { //LOAD
 
-		loadResult = SIM_MemDataRead((uint32_t)addr, &(MemToWB.MEMOut));
-		if (loadResult == -1) nextPCSrc = -1;
+		loadResult = SIM_MemDataRead((uint32_t)addr, &(nextMemToWB.MEMOut));
 		return loadResult;
 	}
 	else if (PipelineSignals[MEMORY].MemWrite == 1) { //STORE
-		int32_t data = core_State.regFile[ExeToMem.dstIdx];
+		int32_t data = ExeToMem.val3;
 		SIM_MemDataWrite((uint32_t)addr, data);
 		return 0;
 	}
@@ -445,7 +459,22 @@ void doNop (pipeStage stage_to_nop){
 
 }
 
+void nextStage(){
+    DecodeToExe.val1 = nextDecodeToExe.val1;
+    DecodeToExe.val2 = nextDecodeToExe.val2;
+    DecodeToExe.val3 = nextDecodeToExe.val3;
+    DecodeToExe.dstIdx = nextDecodeToExe.dstIdx;
+    DecodeToExe.pcp4 = nextDecodeToExe.pcp4;
 
+    ExeToMem.dstIdx = nextExeToMem.dstIdx;
+    ExeToMem.val3 = nextExeToMem.val3;
+    ExeToMem.Zero = nextExeToMem.Zero;
+    ExeToMem.ALUOut = nextExeToMem.ALUOut;
+
+    MemToWB.ALUOut = nextMemToWB.ALUOut;
+    MemToWB.dstIdx = nextMemToWB.dstIdx;
+    MemToWB.MEMOut = nextMemToWB.MEMOut;
+}
 
 void ControlStats (int isMemRead) {
 
