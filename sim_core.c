@@ -32,6 +32,7 @@ ControlSignals PipelineSignals[SIM_PIPELINE_DEPTH];
 
 
 
+
 struct DecodeToExe_ {
 	int32_t val1;
 	int32_t val2;
@@ -59,6 +60,7 @@ struct WBResult_ {
 int PCSrc = 0;
 int32_t PCTarget; //PC+4+dst
 int MemResult=0;
+int PMemResult=0;
 int nextMemResult = 0;
 int CStall = 0;
 int32_t PCnextTarget;
@@ -94,31 +96,33 @@ void SIM_CoreClkTick() {
 	if (split_regfile) {
 		core_State.regFile[WBResult.dstIdx] = WBResult.value;
 	}
-	//nextMemResult = MemoryState();
+	PMemResult = MemResult;
     MemResult = MemoryState();
-	if (MemResult == -1) {
+	if (MemResult == -1) { //lode
 
 		UpdateVal(DECODE);
 
 		FetchStage();
-		//core_State.pc -= 0x4;
+		core_State.pc -= 0x4;
 		return;
 	}
 	else if (MemResult == 0) {
 		ExecuteState();
 		if (CStall == 0) {
 			DecodeState();
-			FetchStage();
+			//FetchStage();
 		}
 		if (!split_regfile) {
 			core_State.regFile[WBResult.dstIdx] = WBResult.value;
 		}
-	}
+
 	else if (MemResult == 1) {
 		FetchStage();
+            //core_State.pc += 0x4;
 	}
 	//MemResult = nextMemResult;
 
+    }
 }
 
 /*! SIM_CoreGetState: Return the current core (pipeline) internal state
@@ -145,9 +149,11 @@ void FetchStage() {
 	    if (PCSrc == 1) {
             core_State.pc = PCTarget;
         } else{
-	       // PCnextTarget = PCTarget;
-            core_State.pc += 0x4;
-            --PCSrc;
+	       //PCnextTarget = PCTarget;
+            if (PCSrc == 2) {
+                core_State.pc += 0x4;
+                --PCSrc;
+            }
 	    }
 	}
 	SIM_MemInstRead((uint32_t)core_State.pc, &core_State.pipeStageState[0].cmd);
@@ -325,7 +331,7 @@ void ExecuteState() {
 int MemoryState() {
 	if (PipelineSignals[3].Branch == 1) {
 		if ((PipelineSignals[3].BrControl == 0 && ExeToMem.Zero) || (PipelineSignals[3].BrControl == 1 && !ExeToMem.Zero)) {
-			PCSrc = 2;
+			PCSrc = 1;
 			return 1;
 		}
 		else PCSrc = 0;
@@ -336,6 +342,7 @@ int MemoryState() {
 	MemToWB.dstIdx = ExeToMem.dstIdx;
 	MemToWB.ALUOut = ExeToMem.ALUOut;
 	if (PipelineSignals[MEMORY].MemRead == 1) { //LOAD
+
 		loadResult = SIM_MemDataRead((uint32_t)addr, &(MemToWB.MEMOut));
 		return loadResult;
 	}
@@ -450,6 +457,7 @@ void doNop (pipeStage stage_to_nop){
 
 
 void ControlStats (int isMemRead) {
+
 	switch (isMemRead) {
 		case 0:
 			CStall = HDU();
@@ -463,7 +471,9 @@ void ControlStats (int isMemRead) {
 				PipelineSignals[EXECUTE] = PipelineSignals[DECODE];
 				core_State.pipeStageState[EXECUTE] = core_State.pipeStageState[DECODE];
 				core_State.pipeStageState[DECODE] = core_State.pipeStageState[FETCH];
+
 			}
+
 			break;
 		case -1:
 			doNop(WRITEBACK);
