@@ -19,6 +19,8 @@ void FetchStage();
 void UpdateVal(pipeStage);
 void doNop(pipeStage);
 void nextStage();
+int Forwarding_HDU();
+pipeStage stageFW;
 
 typedef struct ControlSignals_ {
 	int RegWrite;
@@ -269,6 +271,12 @@ void DecodeState() {
 			case CMD_LOAD:
 			case CMD_BREQ:
 			case CMD_BRNEQ:
+				if ((opc == CMD_BREQ || opc == CMD_BRNEQ || opc == CMD_LOAD) && forwarding && core_State.pipeStageState[MEMORY].cmd.src1 && PipelineSignals[MEMORY].MemWrite == 1){
+					if (core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[DECODE].cmd.src1 || core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[DECODE].cmd.src2){
+						doNop(EXECUTE);
+						return;
+					}
+				}
                 val1 = core_State.regFile[FetchToDecode.cmd.src1];
                 if (FetchToDecode.cmd.isSrc2Imm) {
                     val2 = FetchToDecode.cmd.src2;
@@ -314,10 +322,31 @@ void DecodeState() {
 }
 
 void ExecuteState() {
-	int32_t ALUOut;
+			int32_t val1 =0x0;
+			int32_t val2 = 0x0;
+			int32_t ALUOut;
 	bool Zero = true;
-	int32_t val1 = DecodeToExe.val1;
-	int32_t val2 = DecodeToExe.val2;
+	int FwResult = Forwarding_HDU();
+	if (FwResult && forwarding){
+		switch (FwResult) {
+			case 1: val1 = core_State.pipeStageState[stageFW].src1Val;
+				break;
+			case 2: val2 = core_State.pipeStageState[stageFW].src2Val;
+				break;
+			case 3: val2 = core_State.pipeStageState[stageFW].src1Val;
+				val1 = core_State.pipeStageState[stageFW].src2Val;
+				break;
+
+			case 4:val2 = core_State.pipeStageState[stageFW].src2Val;
+				val1 = core_State.pipeStageState[stageFW].src1Val;
+				break;
+				default: break;
+		}
+	}
+	else {
+		 val1 = DecodeToExe.val1;
+		 val2 = DecodeToExe.val2;
+	}
 	if (PipelineSignals[2].ALUControl == 0) {
 		ALUOut = val1 + val2;
 	} else {
@@ -376,6 +405,7 @@ void WBState() {
 }
 
 int HDU() {
+	if (forwarding) return 0;
 	int idx1 = -1;
 	int idx2 = -1;
 	int idx3 = -1;
@@ -431,6 +461,71 @@ int HDU() {
 	if ((PipelineSignals[WRITEBACK].RegWrite == 1) && (!split_regfile)) {
 		int idx = core_State.pipeStageState[WRITEBACK].cmd.dst;
 		if ((idx == idx1) || (idx == idx2) || (idx == idx3)) return 1;
+	}
+
+	return 0;
+}
+
+int Forwarding_HDU() {
+	int idx1 = -1;
+	int idx2 = -1;
+	int idx3 = -1;
+	switch (core_State.pipeStageState[1].cmd.opcode) {
+		case CMD_ADD:
+		case CMD_SUB:
+			idx1 = core_State.pipeStageState[1].cmd.src1;
+			idx2 = core_State.pipeStageState[1].cmd.src2;
+			break;
+		case CMD_ADDI:
+		case CMD_SUBI:
+			idx1 = core_State.pipeStageState[1].cmd.src1;
+			break;
+		case CMD_LOAD:
+			idx1 = core_State.pipeStageState[1].cmd.src1;
+			if (!core_State.pipeStageState[1].cmd.isSrc2Imm) {
+				idx2 = core_State.pipeStageState[1].cmd.src2;
+			}
+			break;
+		case CMD_STORE:
+			idx3 = core_State.pipeStageState[1].cmd.dst;
+			if (!core_State.pipeStageState[1].cmd.isSrc2Imm) {
+				idx2 = core_State.pipeStageState[1].cmd.src2;
+			}
+			idx1 = core_State.pipeStageState[1].cmd.src1;
+			break;
+		case CMD_BR:
+			idx3 = core_State.pipeStageState[1].cmd.dst;
+			break;
+		case CMD_BREQ:
+		case CMD_BRNEQ:
+			idx1 = core_State.pipeStageState[1].cmd.src1;
+			if (!core_State.pipeStageState[1].cmd.isSrc2Imm) {
+				idx2 = core_State.pipeStageState[1].cmd.src2;
+			}
+			idx3 = core_State.pipeStageState[1].cmd.dst;
+			break;
+		case CMD_HALT:
+		case CMD_NOP:
+			return 0;
+		default:
+			break;
+	}
+	if ((PipelineSignals[WRITEBACK].RegWrite == 1) && (PipelineSignals[MEMORY].RegWrite == 1) && (forwarding) ) {
+		int idxW = core_State.pipeStageState[WRITEBACK].cmd.dst;
+		int idxM = core_State.pipeStageState[MEMORY].cmd.dst;
+		stageFW = MEMORY;
+		if ((idxW == idx1) && (idxM == idx1)) return 1;
+		if ((idxW == idx2) && (idxM == idx2)) return 2;
+		if ((idxW == idx2) && (idxM == idx1)) return 3;
+		if ((idxW == idx1) && (idxM == idx2)) return 4;
+
+	}else if ((PipelineSignals[WRITEBACK].RegWrite == 1) && (forwarding)) {
+		int idx = core_State.pipeStageState[WRITEBACK].cmd.dst;
+		stageFW = WRITEBACK;
+		if (idx == idx1) return 1;
+		if (idx == idx2) return 2;
+		if (idx == idx3) return 3;
+//		if ((idx == idx1) || (idx == idx2) || (idx == idx3)) return 1;
 	}
 	return 0;
 }

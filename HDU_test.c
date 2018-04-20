@@ -6,7 +6,7 @@
 
 
 bool split_regfile = false;
-
+bool forwarding = false;
 void DumpCoreState(SIM_coreState *state) {
     int i;
     SIM_cmd *curCmd;
@@ -53,7 +53,7 @@ static bool testClkTick() {
 int main(int argc, char const *argv[]) {
 
         int i, simDuration;
-        //forwarding = false ;
+        forwarding = true ;
         split_regfile = false;
 
     char const *memF = "example2.img";
