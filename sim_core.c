@@ -8,6 +8,7 @@
 
 
 SIM_coreState core_State;
+
 void WBState();
 int HDU();
 int MemoryState();

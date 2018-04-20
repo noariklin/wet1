@@ -33,7 +33,8 @@ void DumpCoreState(SIM_coreState *state) {
                state->pipeStageState[i].src2Val);
     }
 }
-
+//bool forwarding;
+//bool split_regfile;
 static bool testClkTick() {
 	char *h_result;
 
@@ -52,11 +53,15 @@ static bool testClkTick() {
 int main(int argc, char const *argv[]) {
 
         int i, simDuration;
-  //      forwarding = false // split_regfile = false;
+        //forwarding = false ;
+        split_regfile = false;
 
-    char const *memF = "example2.img" ;
-        char const *memName = memF;
+    char const *memF = "example2.img";
+            char const *memName = memF;
         int numS = 20;
+
+        split_regfile = true;
+
 //example1
         SIM_coreState curState;
         printf("%s \n" , memF);
