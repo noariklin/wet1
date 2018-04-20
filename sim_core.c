@@ -20,6 +20,7 @@ void UpdateVal(pipeStage);
 void doNop(pipeStage);
 void nextStage();
 int Forwarding_HDU();
+int FStall =0;
 pipeStage stageFW;
 
 typedef struct ControlSignals_ {
@@ -273,7 +274,8 @@ void DecodeState() {
 			case CMD_BRNEQ:
 				if ((opc == CMD_BREQ || opc == CMD_BRNEQ || opc == CMD_LOAD) && forwarding && core_State.pipeStageState[MEMORY].cmd.src1 && PipelineSignals[MEMORY].MemWrite == 1){
 					if (core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[DECODE].cmd.src1 || core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[DECODE].cmd.src2){
-						doNop(EXECUTE);
+						FStall = 1;
+						//doNop(EXECUTE);
 						return;
 					}
 				}
@@ -362,8 +364,15 @@ void ExecuteState() {
 		nextExeToMem.val3 = DecodeToExe.val3;
 }
 
-int MemoryState() {
+int MemoryState() { // !!!!!!!!!!!!!!!!!!!!!!! ---!!!!!!!!!!!!!!!!!!!!!!! ---!!!!!!!!!!!!!!!!!!!!!!! ---!!!!!!!!!!!!!!!!!!!!!!! ---!!!!!!!!!!!!!!!!!!!!!!! ---!!!!!!!!!!!!!!!!!!!!!!! ---
 	nextPCSrc = 0;
+	if ((PipelineSignals[MEMORY].MemWrite == 1) && forwarding && core_State.pipeStageState[MEMORY].cmd.src1 && PipelineSignals[MEMORY].MemWrite == 1){
+		if (core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[DECODE].cmd.src1 || core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[DECODE].cmd.src2){
+			FStall = 1;
+			//doNop(EXECUTE);
+			return 1;
+		}
+	}
 	if (PipelineSignals[3].Branch == 1) {
 		if (((PipelineSignals[3].BrControl == 0) && ExeToMem.Zero) || ((PipelineSignals[3].BrControl == 1) && !ExeToMem.Zero)) {
 			nextPCSrc = 1;
@@ -585,7 +594,7 @@ void ControlStats (int isMemRead) {
 			core_State.pipeStageState[WRITEBACK] = core_State.pipeStageState[MEMORY];
 			PipelineSignals[MEMORY] = PipelineSignals[EXECUTE];
 			core_State.pipeStageState[MEMORY] = core_State.pipeStageState[EXECUTE];
-			if (CStall != 0) {
+			if (CStall != 0 || (FStall != 0 && forwarding)) {
 				doNop(EXECUTE);
 			} else {
 				PipelineSignals[EXECUTE] = PipelineSignals[DECODE];
