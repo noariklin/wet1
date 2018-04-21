@@ -58,7 +58,7 @@ int main(int argc, char const *argv[]) {
 
     char const *memF = "example2.img";
             char const *memName = memF;
-        int numS = 20;
+        int numS = 11;
 
         split_regfile = true;
 
