@@ -113,6 +113,7 @@ void SIM_CoreClkTick() {
 	}
 	if(MemResult == 1){
 	    PCSrc = 1;
+
 	    FetchStage();
 	}
     WBState();
@@ -277,11 +278,11 @@ void DecodeState() {
 			case CMD_BREQ:
 			case CMD_BRNEQ:
 				if ( (forwarding && core_State.pipeStageState[MEMORY].cmd.dst && PipelineSignals[MEMORY].MemToReg == 1) &&
-							(core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[DECODE].cmd.src1 ||
-							 core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[DECODE].cmd.src2)){
+							(core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[EXECUTE].cmd.src1 ||
+							 core_State.pipeStageState[MEMORY].cmd.dst == core_State.pipeStageState[EXECUTE].cmd.src2) && nextMemResult != -1){
 						FStall = 1;
 						//doNop(EXECUTE);
-						return;
+					break;
 					//}
 				} else {
 					val1 = core_State.regFile[FetchToDecode.cmd.src1];
@@ -409,7 +410,7 @@ int MemoryState() { // !!!!!!!!!!!!!!!!!!!!!!! ---!!!!!!!!!!!!!!!!!!!!!!! ---!!!
 	if ((PipelineSignals[DECODE].MemToReg == 1) && core_State.pipeStageState[DECODE].cmd.opcode == CMD_LOAD && forwarding && core_State.pipeStageState[DECODE].cmd.dst && PipelineSignals[DECODE].RegWrite == 1){
 		if (core_State.pipeStageState[DECODE].cmd.dst == core_State.pipeStageState[FETCH].cmd.src2 || core_State.pipeStageState[DECODE].cmd.dst == core_State.pipeStageState[FETCH].cmd.src1){
 			FStall = 1;
-			nextPCSrc = -1;
+			//nextPCSrc = -1;
 			//doNop(EXECUTE);
 			return 7;
 		}
