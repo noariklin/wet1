@@ -54,13 +54,12 @@ int main(int argc, char const *argv[]) {
 
         int i, simDuration;
         forwarding = true ;
-        split_regfile = false;
 
-    char const *memF = "example2.img";
-            char const *memName = memF;
-        int numS = 11;
+    char const *memF = "example1.img";
+    char const *memName = memF;
+    int numS = 20;
 
-        split_regfile = true;
+       split_regfile = true;
 
 //example1
         SIM_coreState curState;

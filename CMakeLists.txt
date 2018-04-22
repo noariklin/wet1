@@ -8,10 +8,10 @@ set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${GCC_COVERAGE_COMPILE_FLAGS}" )
 
 
 # ---- HDU TEST ----
-set(SOURCE_FILES HDU_test.c sim_mem.c sim_core.c sim_api.h )
+#set(SOURCE_FILES HDU_test.c sim_mem.c sim_core.c sim_api.h )
 
 
-#set(SOURCE_FILES sim_api.h sim_core.c sim_mem.c sim_main.c )
+set(SOURCE_FILES sim_api.h sim_core.c sim_mem.c sim_main.c )
 
 #set(SOURCE_FILES tests/list_mtm/list_mtm1.h tests/list_mtm/list_example_test.c
 #        tests/list_mtm/test_utilities.h tests/list_mtm/list_mtm1.c)
