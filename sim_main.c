@@ -102,7 +102,7 @@ int main(int argc, char const *argv[]) {
     for (i = 0; i < simDuration; i++) {
         SIM_CoreClkTick();
         SIM_MemClkTick();
-        printf("\n\nSimulation on cycle %d. The state is:\n", i+1);
+        printf("\n\nSimulation on cycle %d. The state is:\n", i + 1);
         SIM_CoreGetState(&curState);
         DumpCoreState(&curState);
         bool is_halt = DetectHALT(&curState);
@@ -110,8 +110,8 @@ int main(int argc, char const *argv[]) {
             printf("Program successfully ran for %d cycles\n", i + 1);
             exit(0);
         }
-    }
 
+    }
 
     return 0;
 }
