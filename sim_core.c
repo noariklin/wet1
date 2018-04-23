@@ -147,6 +147,7 @@ void SIM_CoreGetState(SIM_coreState *curState) {
 	curState->pipeStageState[WRITEBACK] = core_State.pipeStageState[WRITEBACK];
 }
 
+// -- Fetch Stage - set a new command //
 void FetchStage() {
 	if (PCSrc == 0) {
 		core_State.pc += 0x4;
@@ -160,6 +161,7 @@ void FetchStage() {
 	SIM_MemInstRead((uint32_t)core_State.pc, &core_State.pipeStageState[0].cmd);
 }
 
+// -- set the signals for the Decode Stage //
 void DecodeSignalsState(SIM_cmd_opcode opc) {
 	switch (opc)
 	{
@@ -242,6 +244,7 @@ void DecodeSignalsState(SIM_cmd_opcode opc) {
 	}
 }
 
+// Update the value in the core table //
 void UpdateVal(pipeStage stage) {
 	switch (core_State.pipeStageState[stage].cmd.opcode)
 	{
@@ -272,6 +275,7 @@ void UpdateVal(pipeStage stage) {
 	}
 }
 
+// Decode stage - //
 void DecodeState() {
 	SIM_cmd_opcode opc = FetchToDecode.cmd.opcode;
 	DecodeSignalsState(opc);
@@ -334,6 +338,7 @@ void DecodeState() {
 
 }
 
+// Execute stage -- ALU and address calculation //
 void ExecuteState() {
     int32_t val1;
     int32_t val2 = DecodeToExe.val2;
@@ -359,6 +364,8 @@ void ExecuteState() {
 	nextExeToMem.val3 = DecodeToExe.val1;
 }
 
+/* Memory stage - Store and Load commands - calculations for barnch
+0  for success ; 1  for branch ; -1 for load pause */
 int MemoryState() {
     nextPCSrc = 0;
 	if (PipelineSignals[3].Branch == 1) {
@@ -391,6 +398,7 @@ int MemoryState() {
 	return 0;
 }
 
+// set the write back values //
 void WBState() {
 	if (PipelineSignals[WRITEBACK].RegWrite == 1) {
 		WBResult.dstIdx = MemToWB.dstIdx;
@@ -407,6 +415,7 @@ void WBState() {
 	}
 }
 
+// Hazard Detection Unit //
 int HDU() {
 
 	int idx1 = -1;
@@ -479,6 +488,7 @@ int HDU() {
 	return 0;
 }
 
+// Forwarding Unit //
 void Forwarding_HDU() {
 	int idx1 = -1;
 	int idx2 = -1;
@@ -553,7 +563,7 @@ void Forwarding_HDU() {
 	return;
 }
 
-
+// replace command with a NOP command //
 void doNop (pipeStage stage_to_nop){
 
 	PipelineSignals[stage_to_nop].ALUControl = 0;
@@ -574,6 +584,7 @@ void doNop (pipeStage stage_to_nop){
 
 }
 
+// promoting the pipeline buffers for next stage //
 void nextStage(){
     if(CStall == 0 ){
         FetchToDecode.pc4p = core_State.pc + 0x4;
@@ -599,6 +610,7 @@ void nextStage(){
     MemToWB.MEMOut = nextMemToWB.MEMOut;
 }
 
+// promoting the core states table and the signals table for next stage //
 void ControlStats (int isMemRead) {
 
 	switch (isMemRead) {
