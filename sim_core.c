@@ -35,6 +35,8 @@ typedef struct ControlSignals_ {
 
 ControlSignals PipelineSignals[SIM_PIPELINE_DEPTH];
 
+// --Pipeline buffers-- //
+
 struct FetchToDecode_{
     SIM_cmd cmd;
     int32_t pc4p;
@@ -298,14 +300,14 @@ void DecodeState() {
 
 				break;
             case CMD_STORE:
-                val1 = core_State.regFile[FetchToDecode.cmd.dst];
+                val1 = core_State.regFile[FetchToDecode.cmd.src1];
                 if (FetchToDecode.cmd.isSrc2Imm) {
                     val2 = FetchToDecode.cmd.src2;
                 } else {
                     val2 = core_State.regFile[FetchToDecode.cmd.src2];
                 }
-                dstIdx = FetchToDecode.cmd.src1;
-                val3 = core_State.regFile[dstIdx];
+                dstIdx = 0;
+                val3 = core_State.regFile[FetchToDecode.cmd.dst];
                 break;
 			case CMD_BR:
 				val1 = 0x0;
@@ -333,8 +335,13 @@ void DecodeState() {
 }
 
 void ExecuteState() {
-    int32_t val1 = DecodeToExe.val1;
+    int32_t val1;
     int32_t val2 = DecodeToExe.val2;
+    if(core_State.pipeStageState[EXECUTE].cmd.opcode == CMD_STORE){
+        val1 = DecodeToExe.val3;
+    }else{
+        val1 = DecodeToExe.val1;
+    }
     int32_t ALUOut;
 	bool Zero = true;
 	if (PipelineSignals[2].ALUControl == 0) {
@@ -349,7 +356,7 @@ void ExecuteState() {
 	nextExeToMem.dstIdx = DecodeToExe.dstIdx;
 	nextExeToMem.ALUOut = ALUOut;
 	nextExeToMem.Zero = Zero;
-	nextExeToMem.val3 = DecodeToExe.val3;
+	nextExeToMem.val3 = DecodeToExe.val1;
 }
 
 int MemoryState() {
